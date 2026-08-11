@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080910" />
+  <title>Image to WebP Converter</title>
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/logo.png" alt="Converter logo" class="brand-logo" />
+        <div class="brand-copy">
+          <h1>Image to <span>WebP</span> Converter</h1>
+          <div class="brand-subline">
+            <p>Convert PNG, JPG, JPEG images to WebP</p>
+            <span class="local-badge">100% Local <b>✓</b></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="mode-switch" aria-label="Conversion mode">
+          <label class="mode-option active" data-mode-card>
+            <input type="radio" name="mode" value="optimized" checked />
+            <span class="mode-icon">▣</span>
+            <span class="mode-text"><strong>Optimized (90%)</strong><small>Best for photos &amp; web</small></span>
+          </label>
+          <label class="mode-option" data-mode-card>
+            <input type="radio" name="mode" value="preserve" />
+            <span class="mode-icon diamond">◇</span>
+            <span class="mode-text"><strong>Preserve Quality</strong><small>Lossless / Max Quality</small></span>
+          </label>
+        </div>
+        <button class="icon-btn" type="button" id="themeBtn" aria-label="Toggle glow">☼</button>
+        <button class="icon-btn" type="button" id="settingsBtn" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+
+    <label class="drop-zone" id="dropZone" for="fileInput">
+      <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple hidden />
+      <div class="drop-glow"></div>
+      <img src="assets/coffee-brewing-transparent.gif" alt="Animated coffee mug with steam" class="coffee-gif" />
+      <div class="drop-copy">
+        <strong>Drop your images here <span>or click to browse</span></strong>
+        <small>Supports PNG, JPG, JPEG (Max 50MB per image)</small>
+      </div>
+    </label>
+
+    <section class="files-section">
+      <div class="files-toolbar">
+        <div class="file-stats">
+          <span id="fileCount" class="accent-text">0 files selected</span>
+          <span id="totalSize" class="muted-inline">Total size: 0 B</span>
+        </div>
+        <div class="toolbar-actions">
+          <button class="btn btn-dark" type="button" id="clearBtn" disabled>▣ <span>Clear All</span></button>
+          <button class="btn btn-purple" type="button" id="addMoreBtn">＋ <span>Add More</span></button>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-head">
+          <div>File Name</div>
+          <div>Original</div>
+          <div>Converted</div>
+          <div>Savings</div>
+          <div>Status</div>
+          <div>Actions</div>
+        </div>
+        <div id="fileList" class="file-list">
+          <div id="emptyState" class="empty-state">Drop images above to start converting.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bottom-panel">
+      <button class="btn btn-dark advanced-button" id="advancedBtn" type="button">☷ <span>Advanced Settings</span></button>
+      <div class="bottom-actions">
+        <button class="btn btn-dark download-selected" id="downloadSelectedBtn" type="button" disabled>⇩ <span>Download Selected</span></button>
+        <button class="btn btn-purple download-all" id="downloadAllBtn" type="button" disabled>⇩ <span>Download All (WebP)</span></button>
+      </div>
+    </section>
+
+    <section class="advanced-card hidden" id="advancedCard">
+      <div class="advanced-title"><strong>Optimized quality</strong><span id="qualityLabel">90%</span></div>
+      <input id="qualityRange" type="range" min="70" max="100" value="90" />
+      <p>Optimized mode uses the selected quality. Preserve Quality uses the browser's maximum WebP quality setting.</p>
+    </section>
+
+    <div class="summary hidden" id="summary"></div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
