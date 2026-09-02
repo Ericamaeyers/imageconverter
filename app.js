@@ -27,33 +27,77 @@ document.querySelectorAll('input[name="mode"]').forEach(radio => {
   });
 });
 
-input.addEventListener('change', () => addFiles([...input.files]));
+input.addEventListener('change', (event) => {
+  const picked = Array.from(event.target.files || []);
+  if (!picked.length) return;
+  addFiles(picked);
+});
 addMoreBtn.addEventListener('click', () => input.click());
 ['dragenter','dragover'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add('dragging'); }));
 ['dragleave','drop'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.remove('dragging'); }));
 drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
 
-function addFiles(incoming){
-  const MAX_FILE_SIZE = 100 * 1024 * 1024;
-  const supported = incoming.filter(f => /\.(png|jpe?g|tiff?)$/i.test(f.name));
-  const valid = supported.filter(f => f.size <= MAX_FILE_SIZE);
-  const tooLarge = supported.filter(f => f.size > MAX_FILE_SIZE);
-  const unsupported = incoming.filter(f => !/\.(png|jpe?g|tiff?)$/i.test(f.name));
+function getExtension(name){
+  const match = String(name || '').trim().toLowerCase().match(/\.([^.]+)$/);
+  return match ? match[1] : '';
+}
 
-  if (tooLarge.length || unsupported.length) {
+function isSupportedFile(file){
+  // Intentionally validate by filename extension, not MIME type.
+  // macOS/Chrome can report TIFF as image/tif, image/tiff, application/octet-stream, or an empty MIME type.
+  return ['png','jpg','jpeg','tif','tiff'].includes(getExtension(file && file.name));
+}
+
+function showMessage(message){
+  summary.textContent = message;
+  summary.classList.remove('hidden');
+}
+
+function addFiles(incoming){
+  try {
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
+    const picked = Array.from(incoming || []);
+    const supported = picked.filter(isSupportedFile);
+    const valid = supported.filter(f => Number(f.size || 0) <= MAX_FILE_SIZE);
+    const tooLarge = supported.filter(f => Number(f.size || 0) > MAX_FILE_SIZE);
+    const unsupported = picked.filter(f => !isSupportedFile(f));
+
     const messages = [];
-    if (tooLarge.length) messages.push(`${tooLarge.length} file${tooLarge.length===1?' was':'s were'} over the 100MB limit`);
-    if (unsupported.length) messages.push(`${unsupported.length} unsupported file${unsupported.length===1?'':'s'}`);
-    summary.textContent = `Skipped: ${messages.join(' and ')}.`;
-    summary.classList.remove('hidden');
+    if (tooLarge.length) {
+      messages.push(`${tooLarge.length} file${tooLarge.length===1?' was':'s were'} over the 100MB-per-file limit`);
+    }
+    if (unsupported.length) {
+      messages.push(`${unsupported.length} unsupported file${unsupported.length===1?'':'s'} (${unsupported.map(f => f.name).join(', ')})`);
+    }
+
+    valid.forEach(file => {
+      const exists = files.some(x => x.file.name === file.name && x.file.size === file.size && x.file.lastModified === file.lastModified);
+      if (!exists) {
+        files.push({
+          id: (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+            ? globalThis.crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          file,
+          selected: true,
+          converted: null,
+          status: 'Ready',
+          error: null
+        });
+      }
+    });
+
+    input.value = '';
+    render();
+
+    if (messages.length) showMessage(`Skipped: ${messages.join(' and ')}.`);
+    else if (valid.length) showMessage(`${valid.length} file${valid.length===1?'':'s'} added. Starting conversion…`);
+
+    // Allow the browser to paint the selected files before decoding large TIFFs.
+    requestAnimationFrame(() => setTimeout(() => autoConvertNew(), 0));
+  } catch (error) {
+    console.error('Unable to add files:', error);
+    showMessage(`Unable to add the selected files: ${error && error.message ? error.message : 'Unknown error'}`);
   }
-  valid.forEach(file => {
-    const exists = files.some(x => x.file.name === file.name && x.file.size === file.size && x.file.lastModified === file.lastModified);
-    if (!exists) files.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()), file, selected:true, converted:null, status:'Ready' });
-  });
-  input.value = '';
-  render();
-  autoConvertNew();
 }
 
 function render(){
@@ -75,7 +119,7 @@ function render(){
 
 function makeRow(item){
   const row = document.createElement('div'); row.className='file-row';
-  const isTiff = /\.tiff?$/i.test(item.file.name);
+  const isTiff = ['tif','tiff'].includes(getExtension(item.file.name));
   const previewSource = isTiff && !item.converted ? null : (isTiff ? item.converted.blob : item.file);
   const tiffPlaceholder = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58" viewBox="0 0 58 58"><rect width="58" height="58" rx="8" fill="%23171a23"/><text x="29" y="34" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="%23b58cff">TIFF</text></svg>`);
   const url = previewSource ? URL.createObjectURL(previewSource) : tiffPlaceholder;
@@ -107,7 +151,7 @@ function makeRow(item){
 async function convertItem(item){
   item.status='Converting'; render();
   try{ item.converted=await toWebP(item.file,currentMode()); item.status='Done'; }
-  catch(e){ console.error(e); item.status='Error'; }
+  catch(e){ console.error(e); item.status='Error'; item.error = e && e.message ? e.message : 'Conversion failed'; showMessage(`${item.file.name}: ${item.error}`); }
   render();
 }
 
@@ -134,7 +178,7 @@ function updateSummary(){
 }
 
 async function toWebP(file, mode){
-  if (/\.tiff?$/i.test(file.name)) return tiffToWebP(file, mode);
+  if (['tif','tiff'].includes(getExtension(file.name))) return tiffToWebP(file, mode);
   return browserImageToWebP(file, mode);
 }
 
