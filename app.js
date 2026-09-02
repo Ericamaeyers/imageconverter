@@ -34,7 +34,19 @@ addMoreBtn.addEventListener('click', () => input.click());
 drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
 
 function addFiles(incoming){
-  const valid = incoming.filter(f => /\.(png|jpe?g|tiff?)$/i.test(f.name) && f.size <= 50 * 1024 * 1024);
+  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+  const supported = incoming.filter(f => /\.(png|jpe?g|tiff?)$/i.test(f.name));
+  const valid = supported.filter(f => f.size <= MAX_FILE_SIZE);
+  const tooLarge = supported.filter(f => f.size > MAX_FILE_SIZE);
+  const unsupported = incoming.filter(f => !/\.(png|jpe?g|tiff?)$/i.test(f.name));
+
+  if (tooLarge.length || unsupported.length) {
+    const messages = [];
+    if (tooLarge.length) messages.push(`${tooLarge.length} file${tooLarge.length===1?' was':'s were'} over the 100MB limit`);
+    if (unsupported.length) messages.push(`${unsupported.length} unsupported file${unsupported.length===1?'':'s'}`);
+    summary.textContent = `Skipped: ${messages.join(' and ')}.`;
+    summary.classList.remove('hidden');
+  }
   valid.forEach(file => {
     const exists = files.some(x => x.file.name === file.name && x.file.size === file.size && x.file.lastModified === file.lastModified);
     if (!exists) files.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()), file, selected:true, converted:null, status:'Ready' });
