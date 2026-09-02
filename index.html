@@ -16,7 +16,7 @@
         <div class="brand-copy">
           <h1>Image to <span>WebP</span> Converter</h1>
           <div class="brand-subline">
-            <p>Convert PNG, JPG, JPEG images to WebP</p>
+            <p>Convert PNG, JPG, JPEG, TIFF images to WebP</p>
             <span class="local-badge">100% Local <b>✓</b></span>
           </div>
         </div>
@@ -41,12 +41,12 @@
     </header>
 
     <label class="drop-zone" id="dropZone" for="fileInput">
-      <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" multiple hidden />
+      <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,.tif,.tiff,image/png,image/jpeg,image/tiff" multiple hidden />
       <div class="drop-glow"></div>
       <img src="assets/coffee-brewing-transparent.gif" alt="Animated coffee mug with steam" class="coffee-gif" />
       <div class="drop-copy">
         <strong>Drop your images here <span>or click to browse</span></strong>
-        <small>Supports PNG, JPG, JPEG (Max 50MB per image)</small>
+        <small>Supports PNG, JPG, JPEG, TIFF (Max 50MB per image)</small>
       </div>
     </label>
 
@@ -93,6 +93,8 @@
 
     <div class="summary hidden" id="summary"></div>
   </main>
+  <script src="https://cdn.jsdelivr.net/npm/pako@1.0.11/dist/pako.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

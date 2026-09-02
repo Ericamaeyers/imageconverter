@@ -34,7 +34,7 @@ addMoreBtn.addEventListener('click', () => input.click());
 drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
 
 function addFiles(incoming){
-  const valid = incoming.filter(f => /\.(png|jpe?g)$/i.test(f.name) && f.size <= 50 * 1024 * 1024);
+  const valid = incoming.filter(f => /\.(png|jpe?g|tiff?)$/i.test(f.name) && f.size <= 50 * 1024 * 1024);
   valid.forEach(file => {
     const exists = files.some(x => x.file.name === file.name && x.file.size === file.size && x.file.lastModified === file.lastModified);
     if (!exists) files.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()), file, selected:true, converted:null, status:'Ready' });
@@ -63,12 +63,15 @@ function render(){
 
 function makeRow(item){
   const row = document.createElement('div'); row.className='file-row';
-  const url = URL.createObjectURL(item.file);
+  const isTiff = /\.tiff?$/i.test(item.file.name);
+  const previewSource = isTiff && !item.converted ? null : (isTiff ? item.converted.blob : item.file);
+  const tiffPlaceholder = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="58" height="58" viewBox="0 0 58 58"><rect width="58" height="58" rx="8" fill="%23171a23"/><text x="29" y="34" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="%23b58cff">TIFF</text></svg>`);
+  const url = previewSource ? URL.createObjectURL(previewSource) : tiffPlaceholder;
   const convertedSize = item.converted?.blob.size;
   row.innerHTML = `
     <div class="file-main">
       <input class="select-box" type="checkbox" ${item.selected?'checked':''} aria-label="Select ${escapeHtml(item.file.name)}">
-      <img class="thumb" alt="" src="${url}">
+      <img class="thumb ${isTiff && !item.converted ? 'tiff-pending' : ''}" alt="" src="${url}">
       <div class="file-name" title="${escapeHtml(item.file.name)}">${escapeHtml(item.file.name)}</div>
     </div>
     <div class="metric original">${fmt(item.file.size)}</div>
@@ -80,7 +83,7 @@ function makeRow(item){
       <button class="mini-btn download-btn" title="Download" ${item.converted?'':'disabled'}>⇩</button>
       <button class="mini-btn danger remove-btn" title="Remove">⌫</button>
     </div>`;
-  row.querySelector('.thumb').addEventListener('load',()=>URL.revokeObjectURL(url),{once:true});
+  if (previewSource) row.querySelector('.thumb').addEventListener('load',()=>URL.revokeObjectURL(url),{once:true});
   row.querySelector('.select-box').addEventListener('change',e=>{item.selected=e.target.checked;render();});
   row.querySelector('.remove-btn').addEventListener('click',()=>{files=files.filter(x=>x.id!==item.id);render();});
   row.querySelector('.download-btn').addEventListener('click',()=>item.converted&&download(item.converted.blob,item.converted.name));
@@ -118,22 +121,72 @@ function updateSummary(){
   summary.textContent=`${done.length} image${done.length===1?'':'s'} converted. ${fmt(original)} → ${fmt(converted)} (${savings(original,converted)}).`;
 }
 
-function toWebP(file, mode){
+async function toWebP(file, mode){
+  if (/\.tiff?$/i.test(file.name)) return tiffToWebP(file, mode);
+  return browserImageToWebP(file, mode);
+}
+
+function browserImageToWebP(file, mode){
   return new Promise((resolve,reject)=>{
-    const img = new Image(); const url = URL.createObjectURL(file);
+    const img = new Image();
+    const url = URL.createObjectURL(file);
     img.onload = () => {
-      const canvas = document.createElement('canvas'); canvas.width=img.naturalWidth; canvas.height=img.naturalHeight;
-      const ctx = canvas.getContext('2d',{alpha:true}); ctx.drawImage(img,0,0);
-      const q = mode === 'optimized' ? Number(qualityRange.value)/100 : 1;
-      canvas.toBlob(blob=>{
-        URL.revokeObjectURL(url);
-        if(!blob) return reject(new Error('WebP conversion failed'));
-        resolve({name:file.name.replace(/\.(png|jpe?g)$/i,'')+'.webp',blob});
-      },'image/webp',q);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d',{alpha:true});
+      ctx.drawImage(img,0,0);
+      canvasToWebP(canvas, mode)
+        .then(blob => resolve({name:webPName(file.name),blob}))
+        .catch(reject)
+        .finally(() => URL.revokeObjectURL(url));
     };
     img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Unable to read image'));};
     img.src=url;
   });
+}
+
+async function tiffToWebP(file, mode){
+  if (typeof UTIF === 'undefined') {
+    throw new Error('TIFF decoder failed to load. Check your internet connection and reload the page.');
+  }
+
+  const buffer = await file.arrayBuffer();
+  const ifds = UTIF.decode(buffer);
+  if (!ifds || !ifds.length) throw new Error('No image was found in this TIFF file.');
+
+  // Convert the first page/frame. Multi-page TIFFs are intentionally handled as first-page only.
+  const page = ifds[0];
+  UTIF.decodeImage(buffer, page);
+  const rgba = UTIF.toRGBA8(page);
+
+  const width = page.width || page.t256?.[0];
+  const height = page.height || page.t257?.[0];
+  if (!width || !height) throw new Error('Unable to determine TIFF dimensions.');
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { alpha:true });
+  const imageData = new ImageData(new Uint8ClampedArray(rgba), width, height);
+  ctx.putImageData(imageData, 0, 0);
+
+  const blob = await canvasToWebP(canvas, mode);
+  return { name:webPName(file.name), blob, multiPage:ifds.length > 1 };
+}
+
+function canvasToWebP(canvas, mode){
+  const q = mode === 'optimized' ? Number(qualityRange.value)/100 : 1;
+  return new Promise((resolve,reject)=>{
+    canvas.toBlob(blob=>{
+      if(!blob) return reject(new Error('WebP conversion failed'));
+      resolve(blob);
+    },'image/webp',q);
+  });
+}
+
+function webPName(name){
+  return name.replace(/\.(png|jpe?g|tiff?)$/i,'') + '.webp';
 }
 
 downloadAllBtn.addEventListener('click',()=>downloadMany(files.filter(x=>x.converted)));
